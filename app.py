@@ -34,6 +34,8 @@ sys_role = """
    김 대리의 담당 업무와 마감 기한을 포함합니다.
 9. 이메일 발송 성공 여부는 도구 실행 결과로 판단합니다.
 10. 회의 자료가 없다면 회의 내용을 임의로 작성하지 않습니다.
+11. 이메일 본문은 일반 텍스트 형식으로 작성합니다.
+    **, # 등 Markdown 서식 기호를 사용하지 않습니다.
 """
 
 
@@ -197,3 +199,21 @@ if submit:
         # 응답 출력
         st.subheader("AI 답변")
         st.write(answer)
+
+        # 응답 출력
+        st.subheader("AI 답변")
+        st.write(answer)
+
+        # TTS: 텍스트 → 음성 변환
+        if answer and answer.strip():
+
+            with st.spinner("음성을 생성하고 있습니다..."):
+                speech = client.audio.speech.create(
+                    model="tts-1",
+                    voice="nova",
+                    input=answer
+                )
+
+            # 음성 재생
+            st.subheader("AI 음성 답변")
+            st.audio(speech.content, format="audio/mp3")
