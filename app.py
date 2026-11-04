@@ -4,7 +4,8 @@ import streamlit as st
 from openai import OpenAI
 import smtplib
 from email.mime.text import MIMEText
-from streamlit_calendar import calendar
+import calendar as pycalendar
+from datetime import date
 # OpenAI 클라이언트 생성
 client = OpenAI()
 
@@ -334,50 +335,86 @@ with st.sidebar:
     st.divider()
     st.header("📅 업무 캘린더")
     
-    # 저장된 마감 업무를 달력 이벤트로 변환
-    calendar_events = []
+    
+# 기본 Streamlit 월간 달력
 
-    for item in st.session_state.deadlines:
-        if item["due_date"] is not None:
-            calendar_events.append({
-                "title": "● " + item["task"],
-                "start": item["due_date"],
-                "allDay": True,
-                "backgroundColor": "#DC4545",
-                "borderColor": "#DC4545",
-                "textColor": "#FFFFFF"
-            })
+    if "calendar_year" not in st.session_state:
+        st.session_state.calendar_year = date.today().year
 
-    # 월간 달력 설정
-    calendar_options = {
-        "initialView": "dayGridMonth",
-        "locale": "ko",
-        "headerToolbar": {
-            "left": "prev,next",
-            "center": "title",
-            "right": ""
-        },
-        "height": 380,
-        "dayMaxEvents": 2
+    if "calendar_month" not in st.session_state:
+        st.session_state.calendar_month = date.today().month
+
+    if "selected_deadline_date" not in st.session_state:
+        st.session_state.selected_deadline_date = date.today().isoformat()
+
+    year = st.session_state.calendar_year
+    month = st.session_state.calendar_month
+
+    # 월 이동 버튼
+    prev_col, title_col, next_col = st.columns([1, 3, 1])
+
+    with prev_col:
+        if st.button("◀", key="prev_month"):
+            if month == 1:
+                st.session_state.calendar_year -= 1
+                st.session_state.calendar_month = 12
+            else:
+                st.session_state.calendar_month -= 1
+            st.rerun()
+
+    with title_col:
+        st.markdown(f"**{year}년 {month}월**")
+
+    with next_col:
+        if st.button("▶", key="next_month"):
+            if month == 12:
+                st.session_state.calendar_year += 1
+                st.session_state.calendar_month = 1
+            else:
+                st.session_state.calendar_month += 1
+            st.rerun()
+
+    # 마감일 집합
+    deadline_dates = {
+        item["due_date"]
+        for item in st.session_state.deadlines
+        if item["due_date"] is not None
     }
 
-    # 월간 캘린더 출력
-    calendar_state = calendar(
-        events=calendar_events,
-        options=calendar_options,
-        key="deadline_calendar"
-    )
+    # 월요일부터 시작하는 달력을 일요일 시작으로 설정
+    cal = pycalendar.Calendar(firstweekday=6)
 
-    # 날짜 클릭 결과 저장
-    if "selected_deadline_date" not in st.session_state:
-        st.session_state.selected_deadline_date = None
+    # 요일 표시
+    cols = st.columns(7)
+    for col, day_name in zip(
+        cols, ["일", "월", "화", "수", "목", "금", "토"]
+    ):
+        col.write(day_name)
 
-    if calendar_state and calendar_state.get("callback") == "dateClick":
-        st.session_state.selected_deadline_date = (
-            calendar_state["dateClick"]["date"][:10]
-        )
+    # 월간 날짜 버튼
+    for week in cal.monthdayscalendar(year, month):
+        cols = st.columns(7)
+
+        for col, day in zip(cols, week):
+            if day == 0:
+                continue
+
+            date_str = f"{year}-{month:02d}-{day:02d}"
+
+            label = (
+                f"🔴{day}" if date_str in deadline_dates
+                else str(day)
+            )
+
+            if col.button(
+                label,
+                key=f"cal_{date_str}",
+                use_container_width=True
+            ):
+                st.session_state.selected_deadline_date = date_str
 
     selected_date = st.session_state.selected_deadline_date
+
 
 
     # 선택한 날짜의 업무 찾기
