@@ -435,17 +435,7 @@ with st.sidebar:
 
     st.markdown(calendar_html, unsafe_allow_html=True)
 
-    # 날짜 선택
-    selected_date = st.selectbox(
-        "업무 확인 날짜",
-        options=[
-            f"{year}-{month:02d}-{d:02d}"
-            for d in range(
-                1, pycalendar.monthrange(year, month)[1] + 1
-            )
-        ],
-        key="selected_calendar_date"
-    )
+    
 
 
 
@@ -455,19 +445,7 @@ with st.sidebar:
 
 
 
-    # 선택한 날짜의 업무 찾기
-    selected_tasks = [
-    item for item in st.session_state.deadlines
-    if item["due_date"] == selected_date
-]
-
-    st.subheader("선택한 날짜의 업무")
-
-    if selected_tasks:
-        for item in selected_tasks:
-            st.write("📌", item["task"])
-    else:
-        st.caption("이 날짜에 등록된 업무가 없습니다.")
+    
 
     # 마감일이 확정된 전체 일정
     st.subheader("전체 마감 일정")
