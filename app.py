@@ -323,9 +323,13 @@ if submit:
                     input=answer
                 )
 
-            # 음성 재생
+            # 음성 자동 재생
             st.subheader("AI 음성 답변")
-            st.audio(speech.content, format="audio/mp3")
+            st.audio(
+                speech.content,
+                format="audio/mp3",
+                autoplay=True
+            )
 
 
 # 사이드바에 대화 히스토리 표시
