@@ -97,10 +97,6 @@ with st.form("task_form"):
     uploaded_file = st.file_uploader("텍스트 파일 업로드", type=["txt"])
     audio_value = st.audio_input("무엇을 도와드릴까요?")
     submit = st.form_submit_button("실행")
-    recipient_email = st.text_input(
-        "이메일 수신자 주소",
-        placeholder="example@gmail.com"
-    )
 # 버튼을 눌렀을 때만 실행
 if submit:
     st.session_state.pending_email = None
@@ -141,62 +137,62 @@ if submit:
             tools=tools
         )
         
-# 도구 호출 확인
-tool_calls = [
-    item for item in response.output
-    if item.type == "function_call"
-    and item.name == "send_email"
-]
+        # 도구 호출 확인
+        tool_calls = [
+            item for item in response.output
+            if item.type == "function_call"
+            and item.name == "send_email"
+        ]
 
-# 이메일 발송 요청이 없는 경우
-if not tool_calls:
+        # 이메일 발송 요청이 없는 경우
+        if not tool_calls:
 
-    answer = response.output_text
+            answer = response.output_text
 
-# 이메일 발송 요청이 있는 경우
-else:
-
-    if not text:
-        answer = (
-            "미팅 파일이 첨부되지 않았습니다. "
-            "회의록 파일을 먼저 업로드해주세요."
-        )
-
-    else:
-        # Function Calling 결과 추출
-        item = tool_calls[0]
-        args = json.loads(item.arguments)
-
-        # 김 대리 이메일로 자동 발송
-        result = send_email(
-            to=os.secrets["USER_EMAIL"],
-            subject=args["subject"],
-            body=args["body"]
-        )
-
-        # 이메일 발송 결과를 LLM에 전달
-        tool_outputs = [{
-            "type": "function_call_output",
-            "call_id": item.call_id,
-            "output": json.dumps(
-                result, ensure_ascii=False
-            )
-        }]
-
-        final_response = client.responses.create(
-            model="gpt-4o-mini",
-            previous_response_id=response.id,
-            input=tool_outputs
-        )
-
-        answer = final_response.output_text
-
-        # 실제 발송 결과 표시
-        if result["status"] == "success":
-            st.success("이메일 전송 완료!")
+        # 이메일 발송 요청이 있는 경우
         else:
-            st.error("이메일 전송에 실패했습니다.")
 
-# 응답 출력
-st.subheader("AI 답변")
-st.write(answer)
+            if not text:
+                answer = (
+                    "미팅 파일이 첨부되지 않았습니다. "
+                    "회의록 파일을 먼저 업로드해주세요."
+                )
+
+            else:
+                # Function Calling 결과 추출
+                item = tool_calls[0]
+                args = json.loads(item.arguments)
+
+                # 김 대리 이메일로 자동 발송
+                result = send_email(
+                    to=os.getenv("USER_EMAIL"),
+                    subject=args["subject"],
+                    body=args["body"]
+                )
+
+                # 이메일 발송 결과를 LLM에 전달
+                tool_outputs = [{
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(
+                        result, ensure_ascii=False
+                    )
+                }]
+
+                final_response = client.responses.create(
+                    model="gpt-4o-mini",
+                    previous_response_id=response.id,
+                    input=tool_outputs
+                )
+
+                answer = final_response.output_text
+
+                # 실제 발송 결과 표시
+                if result["status"] == "success":
+                    st.success("이메일 전송 완료!")
+                else:
+                    st.error("이메일 전송에 실패했습니다.")
+
+        # 응답 출력
+        st.subheader("AI 답변")
+        st.write(answer)
