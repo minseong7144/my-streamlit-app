@@ -36,6 +36,9 @@ sys_role = """
 10. 회의 자료가 없다면 회의 내용을 임의로 작성하지 않습니다.
 11. 이메일 본문은 일반 텍스트 형식으로 작성합니다.
     **, # 등 Markdown 서식 기호를 사용하지 않습니다.
+12. 이전 대화 내용을 참고하여 후속 질문에 답변합니다.
+13. 이메일 발송은 이전 대화와 관계없이
+    현재 사용자가 명시적으로 요청했을 때만 수행합니다    
 """
 
 
@@ -94,6 +97,8 @@ tools = [{
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+MAX_TURNS = 10
+
 # 지시 영역
 with st.form("task_form"):
     uploaded_file = st.file_uploader("텍스트 파일 업로드", type=["txt"])
@@ -127,8 +132,15 @@ if submit:
 
     st.subheader("음성 인식 결과")
     st.write(transcript.text)
-    # 사용자 메시지
-    input_messages.append({"role": "user", "content": transcript.text})
+    
+    # 이전 대화 기록 추가
+    input_messages.extend(st.session_state.messages)
+
+    # 현재 사용자 음성 명령 추가
+    input_messages.append({
+        "role": "user",
+        "content": transcript.text
+    })
 
     # LLM 호출 및 응답 듣기
     with st.spinner("답변을 준비하고 있습니다..."):
@@ -195,10 +207,20 @@ if submit:
                 else:
                               st.error("이메일 전송에 실패했습니다.")
                               st.error(result.get("error", "알 수 없는 오류"))
+        # 사용자 질문 저장
+        st.session_state.messages.append({
+            "role": "user",
+            "content": transcript.text
+        })
 
-        # 응답 출력
-        st.subheader("AI 답변")
-        st.write(answer)
+        # AI 최종 응답 저장
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer
+        })
+
+        # 최근 10개 대화 턴만 유지
+        st.session_state.messages = st.session_state.messages[-MAX_TURNS * 2:]
 
         # 응답 출력
         st.subheader("AI 답변")
@@ -217,3 +239,22 @@ if submit:
             # 음성 재생
             st.subheader("AI 음성 답변")
             st.audio(speech.content, format="audio/mp3")
+
+# 대화 히스토리 출력
+with st.expander("대화 히스토리"):
+
+    if not st.session_state.messages:
+        st.write("저장된 대화가 없습니다.")
+
+    else:
+        for message in st.session_state.messages:
+
+            if message["role"] == "user":
+                st.markdown("**사용자**")
+                st.write(message["content"])
+
+            elif message["role"] == "assistant":
+                st.markdown("**에이블**")
+                st.write(message["content"])
+
+            st.divider()
