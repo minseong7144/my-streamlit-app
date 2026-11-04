@@ -38,7 +38,15 @@ sys_role = """
     **, # 등 Markdown 서식 기호를 사용하지 않습니다.
 12. 이전 대화 내용을 참고하여 후속 질문에 답변합니다.
 13. 이메일 발송은 이전 대화와 관계없이
-    현재 사용자가 명시적으로 요청했을 때만 수행합니다    
+    현재 사용자가 명시적으로 요청했을 때만 수행합니다.
+14. 첨부된 회의록에 김 대리의 마감 업무가 있다면
+    업무마다 save_deadline 도구를 호출합니다.
+15. 회의록에 정확한 마감일이 있는 경우에만
+    YYYY-MM-DD 형식으로 저장합니다.
+16. "다음 주까지"처럼 정확한 날짜가 불분명하면
+    due_date는 null로 전달하고,
+    due_text에 원문 표현을 보존합니다.
+17. 마감일과 담당 업무를 임의로 만들어내지 않습니다.   
 """
 
 
@@ -93,11 +101,50 @@ tools = [{
 }]
 
 
+# 일정 등록 Function Calling 도구
+tools.append({
+    "type": "function",
+    "name": "save_deadline",
+    "description": (
+        "첨부된 회의록에서 김 대리에게 배정된 "
+        "마감 업무를 발견하면 업무별로 저장합니다. "
+        "정확한 날짜를 알 수 없어도 원문 마감 표현을 저장합니다."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "task": {
+                "type": "string",
+                "description": "김 대리에게 배정된 업무"
+            },
+            "due_date": {
+                "type": ["string", "null"],
+                "description": (
+                    "정확히 확인되는 마감일 YYYY-MM-DD. "
+                    "날짜가 불확실하면 null"
+                )
+            },
+            "due_text": {
+                "type": "string",
+                "description": "회의록에 나온 마감일 표현 원문"
+            }
+        },
+        "required": ["task", "due_date", "due_text"],
+        "additionalProperties": False
+    },
+    "strict": True
+})
+
+
 # 상태 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 MAX_TURNS = 10
+
+# 회의 업무 일정 저장
+if "deadlines" not in st.session_state:
+    st.session_state.deadlines = []
 
 # 지시 영역
 with st.form("task_form"):
@@ -151,12 +198,101 @@ if submit:
             tools=tools
         )
         
+        
         # 도구 호출 확인
         tool_calls = [
             item for item in response.output
             if item.type == "function_call"
-            and item.name == "send_email"
         ]
+
+        tool_outputs = []
+
+        # 도구를 호출하지 않은 경우
+        if not tool_calls:
+            answer = response.output_text
+
+        # 하나 이상의 도구를 호출한 경우
+        else:
+            for item in tool_calls:
+
+                args = json.loads(item.arguments)
+
+                # 1. 이메일 발송
+                if item.name == "send_email":
+
+                    if not text:
+                        result = {
+                            "status": "failed",
+                            "error": "회의록 파일이 없습니다."
+                        }
+
+                    else:
+                        result = send_email(
+                            to=os.getenv("GMAIL_ADDRESS"),
+                            subject=args["subject"],
+                            body=args["body"]
+                        )
+
+                    if result["status"] == "success":
+                        st.success("이메일 전송 완료!")
+                    else:
+                        st.error("이메일 전송에 실패했습니다.")
+
+                # 2. 회의 업무 일정 저장
+                elif item.name == "save_deadline":
+
+                    from datetime import date
+
+                    task = args["task"]
+                    due_date = args["due_date"]
+                    due_text = args["due_text"]
+
+                    # 날짜 형식 확인
+                    if due_date is not None:
+                        try:
+                            date.fromisoformat(due_date)
+                        except (ValueError, TypeError):
+                            due_date = None
+
+                    new_task = {
+                        "task": task,
+                        "due_date": due_date,
+                        "due_text": due_text
+                    }
+
+                    # 동일한 일정 중복 저장 방지
+                    if new_task not in st.session_state.deadlines:
+                        st.session_state.deadlines.append(new_task)
+
+                    result = {
+                        "status": "success",
+                        "message": "업무 일정 저장 완료"
+                    }
+
+                else:
+                    result = {
+                        "status": "failed",
+                        "error": "알 수 없는 도구"
+                    }
+
+                # 각 도구의 실행 결과 수집
+                tool_outputs.append({
+                    "type": "function_call_output",
+                    "call_id": item.call_id,
+                    "output": json.dumps(
+                        result, ensure_ascii=False
+                    )
+                })
+
+            # 도구 실행 결과를 LLM에 전달
+            final_response = client.responses.create(
+                model="gpt-4o-mini",
+                previous_response_id=response.id,
+                input=tool_outputs
+            )
+
+            answer = final_response.output_text
+
 
         # 이메일 발송 요청이 없는 경우
         if not tool_calls:
@@ -265,3 +401,58 @@ with st.sidebar:
 
                 st.markdown("**에이블**")
                 st.write(ai_msg["content"])
+
+    # 업무 캘린더
+    st.divider()
+    st.header("📅 업무 캘린더")
+
+    # 날짜 선택 (달력 팝업 제공)
+    selected_date = st.date_input(
+        "날짜 선택",
+        value="today",
+        key="calendar_date"
+    )
+
+    # 선택한 날짜의 업무 찾기
+    selected_tasks = [
+        item for item in st.session_state.deadlines
+        if item["due_date"] == selected_date.isoformat()
+    ]
+
+    st.subheader("선택한 날짜의 업무")
+
+    if selected_tasks:
+        for item in selected_tasks:
+            st.write("📌", item["task"])
+    else:
+        st.caption("이 날짜에 등록된 업무가 없습니다.")
+
+    # 마감일이 확정된 전체 일정
+    st.subheader("전체 마감 일정")
+
+    dated_tasks = [
+        item for item in st.session_state.deadlines
+        if item["due_date"] is not None
+    ]
+
+    for item in sorted(
+        dated_tasks,
+        key=lambda x: x["due_date"]
+    ):
+        st.write(
+            f"📅 {item['due_date']} — {item['task']}"
+        )
+
+    # 날짜가 불명확한 업무
+    undated_tasks = [
+        item for item in st.session_state.deadlines
+        if item["due_date"] is None
+    ]
+
+    if undated_tasks:
+        st.subheader("날짜 확인 필요")
+
+        for item in undated_tasks:
+            st.write(
+                f"📌 {item['task']} ({item['due_text']})"
+            )
