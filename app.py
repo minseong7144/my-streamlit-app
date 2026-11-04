@@ -165,7 +165,7 @@ if submit:
 
                 # 김 대리 이메일로 자동 발송
                 result = send_email(
-                    to=os.getenv("USER_EMAIL"),
+                    to=os.getenv("GMAIL_ADDRESS"),
                     subject=args["subject"],
                     body=args["body"]
                 )
