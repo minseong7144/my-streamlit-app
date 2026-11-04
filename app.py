@@ -40,14 +40,26 @@ sys_role = """
 12. 이전 대화 내용을 참고하여 후속 질문에 답변합니다.
 13. 이메일 발송은 이전 대화와 관계없이
     현재 사용자가 명시적으로 요청했을 때만 수행합니다.
-14. 첨부된 회의록에 김 대리의 마감 업무가 있다면
-    업무마다 save_deadline 도구를 호출합니다.
-15. 회의록에 정확한 마감일이 있는 경우에만
-    YYYY-MM-DD 형식으로 저장합니다.
-16. "다음 주까지"처럼 정확한 날짜가 불분명하면
-    due_date는 null로 전달하고,
-    due_text에 원문 표현을 보존합니다.
-17. 마감일과 담당 업무를 임의로 만들어내지 않습니다.   
+14. 첨부된 회의록에서 김 대리에게 배정된 업무를
+    분석하고 마감 기한이 언급된 업무만
+    save_deadline 도구를 호출합니다.
+
+15. 연도, 월, 일이 명확한 경우에는
+    due_date를 YYYY-MM-DD 형식으로 전달합니다.
+
+16. "다음 주까지", "이번 달 중", "금요일까지"처럼
+    정확한 날짜를 확정할 수 없는 경우에는
+    due_date를 null로 전달하고
+    due_text에 원문 마감 표현을 저장합니다.
+
+17. 마감 기한이 전혀 언급되지 않은 업무는
+    save_deadline 도구를 호출하지 않습니다.
+
+18. 날짜를 임의로 추측하거나 생성하지 않습니다.
+    회의록에 없는 마감 기한을 추가하지 않습니다.
+
+19. 업무별 마감 기한을 구분하여 판단합니다.
+    다른 업무의 마감 기한을 임의로 적용하지 않습니다.   
 """
 
 
@@ -107,9 +119,12 @@ tools.append({
     "type": "function",
     "name": "save_deadline",
     "description": (
-        "첨부된 회의록에서 김 대리에게 배정된 "
-        "마감 업무를 발견하면 업무별로 저장합니다. "
-        "정확한 날짜를 알 수 없어도 원문 마감 표현을 저장합니다."
+        "회의록에서 김 대리에게 배정된 업무 중 "
+    "마감 기한이 명시적으로 언급된 업무만 저장합니다. "
+    "정확한 날짜가 있으면 due_date에 YYYY-MM-DD를 전달합니다. "
+    "마감 기한 표현은 있지만 정확한 날짜가 없으면 "
+    "due_date를 null로 전달하고 due_text에 원문을 저장합니다. "
+    "마감 기한이 전혀 언급되지 않은 업무는 이 도구를 호출하지 않습니다."
     ),
     "parameters": {
         "type": "object",
@@ -239,42 +254,58 @@ if submit:
                     else:
                         st.error("이메일 전송에 실패했습니다.")
 
-                # 2. 회의 업무 일정 저장
+                
+# 2. 회의 업무 일정 저장
                 elif item.name == "save_deadline":
 
                     from datetime import date
 
-                    task = args["task"]
+                    task = args["task"].strip()
                     due_date = args["due_date"]
-                    due_text = args["due_text"]
+                    due_text = args["due_text"].strip()
 
-                    # 날짜 형식 확인
-                    if due_date is not None:
-                        try:
-                            date.fromisoformat(due_date)
-                        except (ValueError, TypeError):
-                            due_date = None
+                    # 1. 마감 기한 표현이 있는지 확인
+                    if not due_text or due_text in [
+                        "없음", "미언급", "언급 없음",
+                        "마감일 없음", "특정 마감일 없음"
+                    ]:
+                        result = {
+                            "status": "skipped",
+                            "message": "마감 기한이 언급되지 않아 저장하지 않았습니다."
+                        }
 
-                    new_task = {
-                        "task": task,
-                        "due_date": due_date,
-                        "due_text": due_text
-                    }
+                    else:
+                        # 2. 날짜 형식 확인
+                        if due_date is not None:
+                            try:
+                                date.fromisoformat(due_date)
+                            except (ValueError, TypeError):
+                                due_date = None
 
-                    # 동일한 일정 중복 저장 방지
-                    if new_task not in st.session_state.deadlines:
-                        st.session_state.deadlines.append(new_task)
+                        # 3. 저장할 업무 생성
+                        new_task = {
+                            "task": task,
+                            "due_date": due_date,
+                            "due_text": due_text
+                        }
 
-                    result = {
-                        "status": "success",
-                        "message": "업무 일정 저장 완료"
-                    }
+                        # 4. 중복 저장 방지
+                        if new_task not in st.session_state.deadlines:
+                            st.session_state.deadlines.append(new_task)
 
-                else:
-                    result = {
-                        "status": "failed",
-                        "error": "알 수 없는 도구"
-                    }
+                        # 5. 날짜 정확성에 따른 결과 반환
+                        if due_date is not None:
+                            result = {
+                                "status": "success",
+                                "message": "캘린더에 마감 일정을 등록했습니다."
+                            }
+
+                        else:
+                            result = {
+                                "status": "success",
+                                "message": "날짜 확인 필요 목록에 등록했습니다."
+                            }
+
 
                 # 각 도구의 실행 결과 수집
                 tool_outputs.append({
