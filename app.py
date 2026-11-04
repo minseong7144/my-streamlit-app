@@ -240,21 +240,28 @@ if submit:
             st.subheader("AI 음성 답변")
             st.audio(speech.content, format="audio/mp3")
 
-# 대화 히스토리 출력
-with st.expander("대화 히스토리"):
+
+# 사이드바에 대화 히스토리 표시
+with st.sidebar:
+
+    st.header("대화 히스토리")
+
+    turn_count = len(st.session_state.messages) // 2
+    st.caption(f"최근 대화 {turn_count}/10개")
 
     if not st.session_state.messages:
         st.write("저장된 대화가 없습니다.")
 
     else:
-        for message in st.session_state.messages:
+        for i in range(0, len(st.session_state.messages), 2):
 
-            if message["role"] == "user":
+            user_msg = st.session_state.messages[i]
+            ai_msg = st.session_state.messages[i + 1]
+
+            with st.expander(f"대화 {i // 2 + 1}"):
+
                 st.markdown("**사용자**")
-                st.write(message["content"])
+                st.write(user_msg["content"])
 
-            elif message["role"] == "assistant":
                 st.markdown("**에이블**")
-                st.write(message["content"])
-
-            st.divider()
+                st.write(ai_msg["content"])
