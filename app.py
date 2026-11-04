@@ -63,6 +63,8 @@ if submit:
         language="ko"
         )
 
+    st.subheader("음성 인식 결과")
+    st.write(transcript.text)
     # 사용자 메시지
     input_messages.append({"role": "user", "content": transcript.text})
 
