@@ -4,7 +4,7 @@ import streamlit as st
 from openai import OpenAI
 import smtplib
 from email.mime.text import MIMEText
-
+from streamlit_calendar import calendar
 # OpenAI 클라이언트 생성
 client = OpenAI()
 
@@ -333,19 +333,58 @@ with st.sidebar:
     # 업무 캘린더
     st.divider()
     st.header("📅 업무 캘린더")
+    
+    # 저장된 마감 업무를 달력 이벤트로 변환
+    calendar_events = []
 
-    # 날짜 선택 (달력 팝업 제공)
-    selected_date = st.date_input(
-        "날짜 선택",
-        value="today",
-        key="calendar_date"
+    for item in st.session_state.deadlines:
+        if item["due_date"] is not None:
+            calendar_events.append({
+                "title": "● " + item["task"],
+                "start": item["due_date"],
+                "allDay": True,
+                "backgroundColor": "#DC4545",
+                "borderColor": "#DC4545",
+                "textColor": "#FFFFFF"
+            })
+
+    # 월간 달력 설정
+    calendar_options = {
+        "initialView": "dayGridMonth",
+        "locale": "ko",
+        "headerToolbar": {
+            "left": "prev,next",
+            "center": "title",
+            "right": ""
+        },
+        "height": 380,
+        "dayMaxEvents": 2
+    }
+
+    # 월간 캘린더 출력
+    calendar_state = calendar(
+        events=calendar_events,
+        options=calendar_options,
+        key="deadline_calendar"
     )
+
+    # 날짜 클릭 결과 저장
+    if "selected_deadline_date" not in st.session_state:
+        st.session_state.selected_deadline_date = None
+
+    if calendar_state and calendar_state.get("callback") == "dateClick":
+        st.session_state.selected_deadline_date = (
+            calendar_state["dateClick"]["date"][:10]
+        )
+
+    selected_date = st.session_state.selected_deadline_date
+
 
     # 선택한 날짜의 업무 찾기
     selected_tasks = [
-        item for item in st.session_state.deadlines
-        if item["due_date"] == selected_date.isoformat()
-    ]
+    item for item in st.session_state.deadlines
+    if item["due_date"] == selected_date
+]
 
     st.subheader("선택한 날짜의 업무")
 
