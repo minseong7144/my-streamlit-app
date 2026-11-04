@@ -189,9 +189,10 @@ if submit:
 
                 # 실제 발송 결과 표시
                 if result["status"] == "success":
-                    st.success("이메일 전송 완료!")
+                              st.success("이메일 전송 완료!")
                 else:
-                    st.error("이메일 전송에 실패했습니다.")
+                              st.error("이메일 전송에 실패했습니다.")
+                              st.error(result.get("error", "알 수 없는 오류"))
 
         # 응답 출력
         st.subheader("AI 답변")
