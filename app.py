@@ -394,7 +394,7 @@ with st.sidebar:
     
 # 월간 날짜 버튼
     for week in cal.monthdayscalendar(year, month):
-        cols = st.columns(7, gap="small")
+        cols = st.columns(7, gap=None)
 
         for col, day in zip(cols, week):
 
@@ -402,18 +402,27 @@ with st.sidebar:
                 continue
 
             date_str = f"{year}-{month:02d}-{day:02d}"
-
-            # 마감일이 있는 날은 빨간색 표시
             has_deadline = date_str in deadline_dates
 
             with col:
+                # 날짜 숫자를 버튼 밖에 표시
+                st.markdown(
+                    f"<div style='text-align:center;"
+                    f"font-size:14px;font-weight:600;'>"
+                    f"{day}</div>",
+                    unsafe_allow_html=True
+                )
+
+                # 날짜 선택 버튼
                 if st.button(
-                    str(day),
+                    "●" if has_deadline else "·",
                     key=f"cal_{date_str}",
                     type="primary" if has_deadline else "secondary",
                     use_container_width=True
                 ):
                     st.session_state.selected_deadline_date = date_str
+
+
 
 
     selected_date = st.session_state.selected_deadline_date
