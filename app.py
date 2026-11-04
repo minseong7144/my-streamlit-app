@@ -384,43 +384,69 @@ with st.sidebar:
     # 월요일부터 시작하는 달력을 일요일 시작으로 설정
     cal = pycalendar.Calendar(firstweekday=6)
 
-    # 요일 표시
-    cols = st.columns(7)
-    for col, day_name in zip(
-        cols, ["일", "월", "화", "수", "목", "금", "토"]
-    ):
-        col.write(day_name)
 
-    
-# 월간 날짜 버튼
+# HTML 월간 달력 생성
+    calendar_html = """
+    <style>
+    .work-calendar {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    .work-calendar th,
+    .work-calendar td {
+        text-align: center;
+        padding: 9px 0;
+        font-size: 14px;
+    }
+    .work-calendar .deadline {
+        background-color: #ff4b4b;
+        color: white;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    </style>
+    <table class="work-calendar">
+    <tr>
+    <th>일</th><th>월</th><th>화</th>
+    <th>수</th><th>목</th><th>금</th><th>토</th>
+    </tr>
+    """
+
     for week in cal.monthdayscalendar(year, month):
-        cols = st.columns(7, gap=None)
+        calendar_html += "<tr>"
 
-        for col, day in zip(cols, week):
-
+        for day in week:
             if day == 0:
-                continue
+                calendar_html += "<td></td>"
+            else:
+                date_str = f"{year}-{month:02d}-{day:02d}"
 
-            date_str = f"{year}-{month:02d}-{day:02d}"
-            has_deadline = date_str in deadline_dates
+                if date_str in deadline_dates:
+                    calendar_html += (
+                        f'<td class="deadline">{day}</td>'
+                    )
+                else:
+                    calendar_html += f"<td>{day}</td>"
 
-            with col:
-                # 날짜 숫자를 버튼 밖에 표시
-                st.markdown(
-                    f"<div style='text-align:center;"
-                    f"font-size:14px;font-weight:600;'>"
-                    f"{day}</div>",
-                    unsafe_allow_html=True
-                )
+        calendar_html += "</tr>"
 
-                # 날짜 선택 버튼
-                if st.button(
-                    "●" if has_deadline else "·",
-                    key=f"cal_{date_str}",
-                    type="primary" if has_deadline else "secondary",
-                    use_container_width=True
-                ):
-                    st.session_state.selected_deadline_date = date_str
+    calendar_html += "</table>"
+
+    st.markdown(calendar_html, unsafe_allow_html=True)
+
+    # 날짜 선택
+    selected_date = st.selectbox(
+        "업무 확인 날짜",
+        options=[
+            f"{year}-{month:02d}-{d:02d}"
+            for d in range(
+                1, pycalendar.monthrange(year, month)[1] + 1
+            )
+        ],
+        key="selected_calendar_date"
+    )
+
 
 
 
