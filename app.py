@@ -391,27 +391,30 @@ with st.sidebar:
     ):
         col.write(day_name)
 
-    # 월간 날짜 버튼
+    
+# 월간 날짜 버튼
     for week in cal.monthdayscalendar(year, month):
-        cols = st.columns(7)
+        cols = st.columns(7, gap="small")
 
         for col, day in zip(cols, week):
+
             if day == 0:
                 continue
 
             date_str = f"{year}-{month:02d}-{day:02d}"
 
-            label = (
-                f"🔴{day}" if date_str in deadline_dates
-                else str(day)
-            )
+            # 마감일이 있는 날은 빨간색 표시
+            has_deadline = date_str in deadline_dates
 
-            if col.button(
-                label,
-                key=f"cal_{date_str}",
-                use_container_width=True
-            ):
-                st.session_state.selected_deadline_date = date_str
+            with col:
+                if st.button(
+                    str(day),
+                    key=f"cal_{date_str}",
+                    type="primary" if has_deadline else "secondary",
+                    use_container_width=True
+                ):
+                    st.session_state.selected_deadline_date = date_str
+
 
     selected_date = st.session_state.selected_deadline_date
 
