@@ -1175,9 +1175,9 @@ if selected_page == PAGES[5]:
     draft = st.session_state.mail_draft or {}
     if st.button("최근 AI 답변을 본문에 불러오기", key="mail_use_last_answer"):
         if st.session_state.last_summary:
-        st.session_state.mail_body = st.session_state.last_summary
+            st.session_state.mail_body = st.session_state.last_summary
         else:
-        st.warning(
+            st.warning(
             "저장된 회의록 요약이 없습니다. "
             "AI 비서에서 먼저 회의록을 요약해주세요."
         )
