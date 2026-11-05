@@ -307,6 +307,17 @@ def ask_ai(question, document=""):
             + "\n\n✉️ '이메일' 메뉴에서 수신자·제목·본문을 "
             "확인한 후 최종 발송을 승인해주세요."
         )
+        st.session_state.messages = (
+          history + [
+        {"role": "user", "content": question},
+        {"role": "assistant", "content": answer}
+                ]
+          )[-10:]
+
+        st.session_state.last_answer = answer
+
+        return answer
+    
     items = [{"role": "system", "content": system}]
     items += history
     items += [{"role": "user", "content": question}]
