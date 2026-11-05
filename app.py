@@ -326,7 +326,7 @@ def ask_ai(question, document=""):
     else:
         answer = result.output_text
         if summary_intent and document.strip() and answer:
-                st.session_state.last_summary = answe
+                st.session_state.last_summary = answer
     st.session_state.messages = (history + [
         {"role": "user", "content": question},
         {"role": "assistant", "content": answer}
