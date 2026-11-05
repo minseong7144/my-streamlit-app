@@ -1183,25 +1183,77 @@ if selected_page == PAGES[5]:
     else:
         st.caption("AI 비서 탭에서 '이메일로 보내줘'라고 요청하거나 아래 칸에 직접 작성할 수 있습니다.")
 
+    
+    # 저장된 이메일 초안
     draft = st.session_state.mail_draft or {}
-    if st.button("최근 AI 답변을 본문에 불러오기", key="mail_use_last_answer"):
+
+    # 새로운 초안인지 확인
+    draft_signature = (
+        draft.get("to", ""),
+        draft.get("subject", ""),
+        draft.get("body", "")
+    )
+
+    # 이메일 탭에 들어왔거나 새로운 초안이 생성되면
+    # 실제 입력창에 자동 반영
+    form_keys = (
+        "mail_form_to",
+        "mail_form_subject",
+        "mail_form_body"
+    )
+
+    if (
+        st.session_state.get("loaded_draft_signature") != draft_signature
+        or any(k not in st.session_state for k in form_keys)
+    ):
+        st.session_state.mail_form_to = draft.get("to", "")
+        st.session_state.mail_form_subject = draft.get(
+            "subject", ""
+        )
+        st.session_state.mail_form_body = draft.get("body", "")
+
+        st.session_state.loaded_draft_signature = draft_signature
+
+    # 기존 수동 불러오기 기능 유지
+    if st.button(
+        "최근 AI 답변을 본문에 불러오기",
+        key="mail_use_last_answer"
+    ):
         if st.session_state.last_summary:
-            st.session_state.mail_body = st.session_state.last_summary
+            st.session_state.mail_form_body = (
+                st.session_state.last_summary
+            )
         else:
-            st.warning(
-            "저장된 회의록 요약이 없습니다. "
-            "AI 비서에서 먼저 회의록을 요약해주세요."
-        )
-    # 폼 위젯은 제출 전까지 재실행되지 않으므로, 확인 여부로 submit을 disabled 처리하면
-    # 체크한 이후에도 버튼이 잠긴 상태로 남음. 버튼은 항상 활성화하고 제출 시 확인 여부 검증.
+            st.warning("저장된 회의록 요약이 없습니다.")
+
+    # 이메일 입력 폼
     with st.form("email_form_v4", clear_on_submit=False):
-        receiver = st.text_input("받는 사람 이메일", key="mail_to")
-        subject = st.text_input("제목", key="mail_subject")
-        email_body = st.text_area(
-            "본문", height=220, key="mail_body"
+
+        receiver = st.text_input(
+            "받는 사람 이메일",
+            key="mail_form_to"
         )
-        allow_send = st.checkbox("수신 주소, 제목, 본문을 확인했으며 발송에 동의합니다.")
-        send = st.form_submit_button("📨 최종 승인 및 발송", type="primary", use_container_width=True)
+
+        subject = st.text_input(
+            "제목",
+            key="mail_form_subject"
+        )
+
+        email_body = st.text_area(
+            "본문",
+            height=220,
+            key="mail_form_body"
+        )
+
+        allow_send = st.checkbox(
+            "수신 주소, 제목, 본문을 확인했으며 발송에 동의합니다."
+        )
+
+        send = st.form_submit_button(
+            "📨 최종 승인 및 발송",
+            type="primary",
+            use_container_width=True
+        )
 
     if send:
         if not allow_send:
