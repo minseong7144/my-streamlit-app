@@ -27,7 +27,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
-st.set_page_config(page_title="AIVLE Learning Hub", page_icon="🎓", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AIVLE Learning Hub", page_icon="🎓", layout="wide", initial_sidebar_state="auto")
 
 # [수정 1] 제공받은 PNG의 흰 배경을 투명 처리한 뒤 Base64로 코드에 직접 삽입했습니다.
 # Streamlit Cloud에 별도의 이미지 파일을 올리지 않아도 동일한 로고가 나타납니다.
@@ -514,25 +514,71 @@ def generate_suggested_questions(document_preview):
         raise ValueError("추천 질문이 비어 있거나 중복되었습니다.")
     return normalized
 
-# ===== [미션 3] Learning Hub 레이아웃: 좌측 문서관리, 상단 탐색/질문/내 문서 =====
+# ===== UI: 청록색 테마 / 한 화면에서 질문과 근거 확인 =====
 st.markdown("""
 <style>
-.stApp { background: #fbfcfb; }
-[data-testid="stSidebar"] { background: #f8faf9; border-right: 1px solid #e6ebe9; }
-[data-testid="stSidebar"] button { text-align: left; }
-.block-container { max-width: 1220px; padding-top: 1.35rem; }
-div.stButton > button { border:1px solid #e3e7e6; border-radius: 12px; min-height: 39px; }
-div.stButton > button:hover { border-color: #2da7a1; color:#187a76; }
-.hero { padding: 24px 26px; background: #f2f4f3; border: 1px solid #e7ebe9; border-radius: 20px; margin-bottom: 16px; }
-.hero-kicker {font-size:.81rem;color:#838b89;letter-spacing:.045em;font-weight:600;}
-.hero-title {font-size:clamp(1.65rem,3vw,2.4rem);font-weight:800;color:#242d2b;margin:8px 0 8px;}
-.hero-subtitle {color:#747e7b;font-size:.96rem;}
-.panel { border:1px solid #e5e8e7; background:#f7f8f7; border-radius:14px; padding: 19px 20px; min-height:100px; }
-.panel-label {font-size:1.08rem;font-weight:700;color:#2b3532;}
-.panel-sub {font-size:.87rem;color:#89918d;margin-top:5px;}
-.mini-label {font-size:.83rem;color:#7a8480;font-weight:650;}
-[data-testid="stChatMessage"] { border:1px solid #e6ece9; border-radius:14px;background:#fff; padding:12px; }
-[data-testid="stChatInput"] { background:white; }
+:root { color-scheme:light; --hub-teal:#117d78; --hub-teal-dark:#0c625e; --hub-ink:#203b39;
+        --hub-muted:#637b78; --hub-line:#dfe9e6; --hub-bg:#ffffff; }
+.stApp { background:var(--hub-bg); color:var(--hub-ink); color-scheme:light; }
+[data-testid="stHeader"] { background:var(--hub-bg); }
+.block-container { max-width:1060px; padding:2rem 2.5rem 3rem; }
+[data-testid="stSidebar"] { background:#f6f9f8; color:var(--hub-ink); color-scheme:light; border-right:1px solid var(--hub-line); }
+[data-testid="stSidebarContent"] { padding-top:1.5rem; }
+h1,h2,h3 { color:var(--hub-ink); letter-spacing:-.04em; }
+p,li { line-height:1.8; }
+[data-testid="stCaptionContainer"] p { color:var(--hub-muted); font-size:.86rem; line-height:1.7; }
+.hub-kicker { color:var(--hub-teal); font-size:.78rem; font-weight:600;
+              letter-spacing:.12em; margin-bottom:.65rem; }
+.hub-title { font-size:clamp(1.65rem,2.6vw,2.2rem); font-weight:700;
+             line-height:1.45; letter-spacing:-.055em; margin:0 0 .8rem; word-break:keep-all; overflow-wrap:anywhere; }
+.hub-description { color:var(--hub-muted); font-size:.98rem; line-height:1.85; }
+.hub-section { color:var(--hub-ink); font-weight:600; margin:1.4rem 0 .25rem; }
+.st-key-welcome { padding:1.25rem 0 .75rem; }
+.st-key-page_header { padding-bottom:.8rem; border-bottom:1px solid var(--hub-line);
+                      margin-bottom:1rem; }
+.st-key-page_header h3 { font-size:1.05rem; margin:0; }
+.stButton > button,[data-testid="stFormSubmitButton"] button {
+    border:1px solid var(--hub-line); border-radius:11px;
+    min-height:42px; color:var(--hub-ink); background:#fff;
+    transition:background .15s,border-color .15s; }
+.stButton > button:hover,[data-testid="stFormSubmitButton"] button:hover {
+    background:#eff8f5; border-color:var(--hub-teal); color:var(--hub-teal-dark); }
+button[kind="primary"],button[data-testid="stBaseButton-primary"],
+[data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"] {
+    background:var(--hub-teal); border-color:var(--hub-teal); color:#fff; }
+button[kind="primary"]:hover,button[data-testid="stBaseButton-primary"]:hover,
+[data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:hover {
+    background:var(--hub-teal-dark); color:#fff; }
+[data-baseweb="input"],[data-baseweb="textarea"],
+[data-testid="stChatInput"] { background:#f4f8f7; border-radius:12px; }
+[data-baseweb="input"] input,[data-baseweb="textarea"] textarea {
+    color:var(--hub-ink); caret-color:var(--hub-teal); }
+[data-testid="stSidebar"] [data-testid="stExpander"] { background:#fff; }
+[class*="st-key-evidence_view_"] [data-testid="stRadio"] label { overflow-wrap:anywhere; }
+.hub-source-label { color:var(--hub-teal-dark); font-weight:600; }
+[data-testid="stSidebar"] [data-testid="stFileUploader"] { margin-bottom:.25rem; }
+[data-testid="stTextInput"] input { min-height:46px; }
+.st-key-recommendations .stButton > button[kind="secondary"] {
+    min-height:88px; padding:17px 20px; text-align:left;
+    justify-content:flex-start; align-items:flex-start; }
+.st-key-recommendations .stButton > button[kind="secondary"] p {
+    white-space:normal; overflow-wrap:anywhere; line-height:1.7; }
+[data-testid="stSidebar"] .stButton > button { text-align:left;
+    justify-content:flex-start; height:auto; }
+[data-testid="stSidebar"] .stButton > button p,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+    white-space:normal; overflow-wrap:anywhere; }
+[data-testid="stExpander"] { border:1px solid var(--hub-line); border-radius:12px;
+    background:#fff; }
+[data-testid="stChatMessage"] { border-radius:16px; padding:1rem 1.2rem;
+    border:1px solid var(--hub-line); background:#fff; margin-bottom:.65rem; }
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    background:#eaf5f1; border-color:#d4e9df; }
+[data-testid="stChatMessageContent"] { min-width:0; overflow-wrap:anywhere; }
+[data-testid="stBottomBlockContainer"] { background:var(--hub-bg); }
+.hub-footer { color:var(--hub-muted); font-size:.78rem; text-align:center;
+              padding:1rem .25rem; line-height:1.75; }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -561,60 +607,235 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
+
+# UI용 함수: 검색 및 답변 생성 로직과 분리합니다.
+def queue_question(question):
+    st.session_state.question_pending = question
+    st.rerun()
+
+
+def render_welcome(ready):
+    with st.container(key="welcome"):
+        st.markdown("<div class='hub-kicker'>AIVLE LEARNING COMPANION</div>", unsafe_allow_html=True)
+        st.markdown("<h1 class='hub-title'>궁금한 순간,<br>백서와 함께 찾아봐요.</h1>", unsafe_allow_html=True)
+        description = (
+            "교육 안내부터 선배의 학습 경험까지, 업로드한 자료에서 근거를 찾아드려요."
+            if ready else
+            "왼쪽에 백서나 학습 자료를 올려주세요. 준비가 끝나면 바로 질문할 수 있어요."
+        )
+        st.markdown(f"<p class='hub-description'>{description}</p>", unsafe_allow_html=True)
+
+
+def render_question_form(ready):
+    with st.container(key="question_form"):
+        with st.form("learning_search", border=False):
+            text_col, action_col = st.columns([5, 1], vertical_alignment="bottom")
+            with text_col:
+                search = st.text_input(
+                    "궁금한 내용을 입력하세요",
+                    placeholder="예: 팀 프로젝트 경험은 어떻게 정리하면 좋을까요?",
+                    label_visibility="collapsed", disabled=not ready
+                )
+            with action_col:
+                submitted = st.form_submit_button(
+                    "질문하기", type="primary",
+                    use_container_width=True, disabled=not ready
+                )
+        if submitted and search.strip():
+            queue_question(search.strip())
+
+
+def render_recommendations():
+    with st.container(key="recommendations"):
+        st.markdown("<div class='hub-section'>이런 질문으로 시작해보세요</div>", unsafe_allow_html=True)
+        st.caption("업로드한 자료에서 찾은 주제로 만든 추천 질문이에요.")
+        questions = st.session_state.suggested_questions[:4]
+        for start in range(0, len(questions), 2):
+            columns = st.columns(2)
+            for column, idx in zip(columns, range(start, min(start + 2, len(questions)))):
+                with column:
+                    if st.button(questions[idx], key=f"recommend_{idx}", use_container_width=True):
+                        queue_question(questions[idx])
+        if not questions:
+            st.info("추천 질문을 만들지 못했어요. 직접 질문하거나 다시 생성해 주세요.")
+            if st.session_state.suggestion_error:
+                with st.expander("추천 질문 오류 확인"):
+                    st.write(st.session_state.suggestion_error)
+        if st.button("추천 질문 다시 생성", key="regenerate_questions", type="tertiary"):
+            st.session_state.suggested_questions = []
+            st.session_state.suggestion_error = None
+            st.rerun()
+
+
+def group_sources(sources, filenames):
+    """파일·위치별로 화면에 묶습니다. RAG가 반환한 발췌는 변경하지 않습니다."""
+    grouped = {}
+    # 파일명에 가운데점이 있어도 업로드한 실제 이름을 우선 사용합니다.
+    filenames = sorted(filenames, key=len, reverse=True)
+    for item in sources:
+        label = str(item.get("label") or "업로드 문서")
+        filename = next(
+            (name for name in filenames if label == name or label.startswith(name + " · ")),
+            None
+        )
+        if filename is not None:
+            location = label[len(filename):].removeprefix(" · ").strip() or "위치 정보 없음"
+        else:
+            match = re.match(r"^(.*\.(?:pdf|docx|pptx|xlsx|txt|md|csv)) · (.+)$", label, re.I)
+            filename, location = match.groups() if match else (label, "위치 정보 없음")
+        snippets = grouped.setdefault(filename, {}).setdefault(location, [])
+        snippet = str(item.get("snippet") or "").strip()
+        if snippet and snippet not in snippets:
+            snippets.append(snippet)
+    return grouped
+
+
+def render_sources(sources, key):
+    if not sources:
+        return
+    filenames = [item["name"] for item in st.session_state.doc_summaries]
+    grouped = group_sources(sources, filenames)
+    with st.expander(f"참고 자료 · {len(grouped)}개 파일 / {len(sources)}개 발췌"):
+        st.caption("검색된 참고 자료 중 최대 6개 발췌예요. 답변에 모두 인용된 것은 아닙니다.")
+        with st.container(key=f"evidence_view_{key}"):
+            pick_col, text_col = st.columns([1, 2], gap="medium")
+            with pick_col:
+                st.caption("자료 선택")
+                names = list(grouped)
+                filename = st.radio(
+                    "참고 파일", names, key=f"{key}_file",
+                    label_visibility="collapsed"
+                ) if len(names) > 1 else names[0]
+                if len(names) == 1:
+                    st.write(filename)
+                positions = list(grouped[filename])
+                file_token = hashlib.sha256(filename.encode("utf-8")).hexdigest()[:10]
+                location = st.selectbox(
+                    "페이지 / 위치", positions,
+                    key=f"{key}_{file_token}_location"
+                ) if len(positions) > 1 else positions[0]
+                if len(positions) == 1:
+                    st.caption(location)
+            with text_col:
+                st.markdown("**" + location + " · 발췌 미리보기**")
+                snippets = grouped[filename][location]
+                excerpt = "\n\n".join(snippets)
+                if not excerpt:
+                    st.info("표시할 발췌 내용이 없습니다.")
+                else:
+                    full = st.toggle("전달된 발췌 전체 보기", key=f"{key}_full")
+                    if full:
+                        st.markdown(excerpt.replace("<br>", "\n"), unsafe_allow_html=False)
+                    else:
+                        preview = re.sub(r"\s+", " ", excerpt.replace("<br>", " ")).strip()
+                        st.write(preview[:160] + ("…" if len(preview) > 160 else ""))
+                    st.caption("전체 페이지가 아닌 검색 발췌입니다. 각 발췌는 최대 380자예요.")
+
+
+def render_document_sidebar(ready=True):
+    """자료 준비 → 문서 확인 → 탐색 → 최근 질문 → 대화 관리 순서."""
+    with st.sidebar:
+        if ready:
+            st.success(f"학습 자료 {len(st.session_state.doc_summaries)}개 준비 완료")
+        else:
+            st.info("자료를 업로드하면 질문할 수 있어요.")
+        with st.expander("내 문서"):
+            if ready:
+                for info in st.session_state.doc_summaries:
+                    st.write(info["name"])
+                    st.caption(f"{info['type']} · 추출 단위 {info['parts']}개 · 약 {info['chars']:,}자")
+                    st.divider()
+            else:
+                st.caption("업로드한 파일이 여기에 표시됩니다.")
+        with st.expander("백서 탐색"):
+            st.caption("자동 추출한 주요 항목이며, 전체 목차와 다를 수 있어요.")
+            topics = st.session_state.doc_topics if ready else []
+            for i, item in enumerate(topics):
+                if st.button(item["title"], key=f"topic_{i}", use_container_width=True):
+                    queue_question(item["title"] + "에 관해 문서에 나온 내용을 정리해 주세요.")
+                st.caption(item["source"])
+            if not topics:
+                st.caption("자료 준비 후 주요 항목을 확인하거나 직접 질문해 주세요.")
+        with st.expander("최근 질문"):
+            recent = st.session_state.recent_topics[-5:] if ready else []
+            for i, topic in enumerate(reversed(recent)):
+                if st.button(topic, key=f"recent_{i}", use_container_width=True):
+                    queue_question(topic)
+            if not recent:
+                st.caption("질문을 시작하면 최근 항목을 다시 볼 수 있어요.")
+        st.divider()
+        if st.button(
+            "대화 내용 삭제", key="clear_conversation", use_container_width=True,
+            disabled=not ready or not bool(st.session_state.messages)
+        ):
+            st.session_state.messages = []
+            st.session_state.recent_topics = []
+            st.rerun()
+        st.caption("대화만 삭제하고 업로드한 자료는 유지해요.")
+
+
+def render_conversation():
+    for index, message in enumerate(st.session_state.messages):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                render_sources(message.get("sources", []), key=f"message_{index}")
+
+    direct = st.chat_input("학습 자료에 대해 질문해 보세요")
+    question = st.session_state.question_pending or direct
+    if not question or not question.strip():
+        return
+
+    st.session_state.question_pending = None
+    question = question.strip()
+    st.session_state.messages.append({"role": "user", "content": question})
+    if question not in st.session_state.recent_topics:
+        st.session_state.recent_topics.append(question)
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
+        with st.spinner("자료에서 근거를 찾고 답변을 확인하고 있어요..."):
+            try:
+                result = st.session_state.rag_chain.invoke({"input": question})
+                answer, sources = result["answer"], result["sources"]
+            except Exception as exc:
+                answer, sources = f"응답 생성 중 오류: {type(exc).__name__}: {exc}", []
+        st.markdown(answer)
+    st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
+    # 추천 질문/문서 항목에서 시작해도 다음 화면은 바로 대화 상태로 전환합니다.
+    st.rerun()
+
+
 with st.sidebar:
-    st.image(LOGO_BYTES, width=94)
+    st.image(LOGO_BYTES, width=88)
     st.markdown("### AIVLE School")
-    st.caption("문서를 읽고 근거를 찾아 답하는 학습 도우미")
+    st.caption("백서와 함께하는 학습 여정")
     st.divider()
-    st.markdown("#### 📂 문서 관리")
+    st.markdown("#### 학습 자료")
     files = st.file_uploader(
-        "학습 자료 업로드 (여러 개 선택 가능)",
+        "백서와 학습 자료를 올려주세요",
         type=SUPPORTED_EXTENSIONS,
         accept_multiple_files=True,
+        max_upload_size=MAX_FILE_BYTES // (1024 * 1024),
         help="PDF · DOCX · PPTX · XLSX · TXT · MD · CSV / 최대 6개 / 개별 20MB, 총 30MB",
         key="uploaded_documents",
     )
+    st.caption("최대 6개 · 파일당 20MB · 전체 30MB")
     if files:
-        st.success(f"선택한 파일 {len(files)}개")
-        for f in files:
-            st.caption(f"📄 {f.name}")
-    else:
-        st.info("AIVLE School 백서나 학습 자료를 업로드해 주세요.")
-        st.caption("별도 백서 파일 배포 없이, 업로드한 자료로 학습합니다.")
-    st.divider()
-    if st.button("🗑️ 대화 내용 삭제", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.recent_topics = []
-        st.rerun()
-    st.caption("대화만 삭제됩니다. 업로드한 문서는 유지됩니다.")
-    st.caption("※ 학습 자료에 없는 사실은 임의로 만들지 않습니다.")
+        st.caption(f"파일 {len(files)}개 선택됨")
 
-# [개선] 상단은 첨부 이미지와 유사한 미니멀 Learning Hub 형태.
-left, right = st.columns([7, 1], vertical_alignment="center")
-with left:
-    st.markdown("### 🎓 AIVLE School")
-with right:
-    st.image(LOGO_BYTES, width=58)
-# [중요] 버튼을 누른 뒤 Streamlit 위젯 상태를 직접 덮어쓰면 예외가 나므로
-# 다음 실행 시작에서만 메뉴 값을 변경합니다.
-if st.session_state.next_mode:
-    st.session_state.app_mode = st.session_state.next_mode
-    st.session_state.next_mode = None
-mode = st.segmented_control("메뉴", ["탐색", "질문", "내 문서"], key="app_mode", label_visibility="collapsed")
+with st.container(key="page_header"):
+    st.markdown("### 학습 도우미")
+    st.caption("문서에서 찾은 근거로, 궁금한 내용을 함께 정리해요.")
 
-st.markdown("""<div class='hero'>
-  <div class='hero-kicker'>AIVLE KNOWLEDGE HUB</div>
-  <div class='hero-title'>에이블스쿨, 무엇이 궁금한가요?</div>
-  <div class='hero-subtitle'>교육과정, 지원 혜택, 프로젝트 등을 질문하고 자료에서 근거를 확인하세요.</div>
-</div>""", unsafe_allow_html=True)
-
-# [조원 개선 ② / 1일차 26행] 같은 문서 세트의 재벡터화 방지.
-# SHA-256 해시는 파일명과 파일 내용에서 생성합니다. Streamlit이 질문마다
-# 스크립트를 재실행하더라도 파일 내용이 같으면 session_state의 RAG 체인을 재사용합니다.
-# 다른 파일을 올리거나 파일 내용을 변경한 경우에만 신규 벡터 저장소를 구성합니다.
 if not files:
-    st.info("왼쪽에서 PDF, DOCX 등 학습 자료를 업로드하면 문서 탐색과 AI 질문이 활성화됩니다.")
+    render_document_sidebar(ready=False)
+    render_welcome(ready=False)
+    render_question_form(ready=False)
+    st.info("학습 자료를 업로드하면 질문과 문서 맞춤 추천이 활성화돼요.")
+    st.caption("PDF · Word · PowerPoint · Excel · 텍스트 자료를 사용할 수 있어요.")
     st.stop()
+
 if len(files) > MAX_FILES:
     st.error(f"최대 {MAX_FILES}개 파일까지 업로드할 수 있습니다.")
     st.stop()
@@ -673,115 +894,17 @@ if not st.session_state.suggested_questions and st.session_state.suggestion_erro
         except Exception as exc:
             st.session_state.suggestion_error = str(exc)
 
-# [UI 변경] 사이드바의 추천 질문 목록은 제거했습니다.
-# 추천 질문은 아래 '탐색' 화면의 검색창 바로 아래에 표시합니다.
-# 기존 문서 분석, AI 질문 생성, 같은 문서의 질문 캐시, RAG 답변 로직은 유지합니다.
 
-def queue_question(question):
-    st.session_state.question_pending = question
-    st.session_state.next_mode = "질문"
-    st.rerun()
+# 시작 화면은 질문 입력, 대화가 시작되면 답변과 참고 자료에 집중합니다.
+render_document_sidebar(ready=True)
 
-if mode == "탐색":
-    # 메인 화면의 학습 포털 검색 필드
-    with st.form("learning_search", border=False):
-        search = st.text_input("무엇이 궁금한가요?", placeholder="교육과정, 지원 혜택, 프로젝트 등을 질문해 보세요", label_visibility="collapsed")
-        search_submit = st.form_submit_button("질문하기", use_container_width=True)
-    if search_submit and search.strip():
-        queue_question(search.strip())
-    # [UI 변경] 고정 주제 버튼 4개를 삭제하고, 업로드 문서 기반 AI 추천 질문으로 대체
-    st.markdown("#### 💡 문서 맞춤 추천 질문")
-    st.caption("업로드한 문서를 분석하여 생성한 질문입니다. 클릭하면 해당 질문으로 답변합니다.")
-    if st.session_state.suggested_questions:
-        # 2열 × 2행: 긴 추천 질문도 읽기 쉽도록 배치
-        recommended = st.session_state.suggested_questions[:4]
-        for row_idx in range(0, len(recommended), 2):
-            cols = st.columns(2)
-            for col, idx in zip(cols, range(row_idx, min(row_idx + 2, len(recommended)))):
-                with col:
-                    if st.button("✦ " + recommended[idx], key=f"recommend_{idx}", use_container_width=True):
-                        queue_question(recommended[idx])
-    else:
-        st.info("추천 질문을 만들지 못했습니다. 아래 버튼으로 다시 시도해 주세요.")
-        if st.session_state.suggestion_error:
-            st.caption(st.session_state.suggestion_error)
-
-    # [UI 변경] 다시 생성 버튼도 추천 질문 바로 아래로 이동
-    if st.button("🔄 추천 질문 다시 생성", key="regenerate_questions", use_container_width=True):
-        st.session_state.suggested_questions = []
-        st.session_state.suggestion_error = None
-        st.rerun()
-    st.write("")
-    panel_a, panel_b = st.columns(2)
-    with panel_a:
-        st.markdown("<div class='panel'><div class='panel-label'>📖 백서 탐색</div><div class='panel-sub'>업로드한 자료의 제목과 주요 항목 둘러보기</div></div>", unsafe_allow_html=True)
-        if st.button("문서 목차 살펴보기", use_container_width=True):
-            st.session_state.next_mode = "내 문서"
-            st.rerun()
-    with panel_b:
-        st.markdown("<div class='panel'><div class='panel-label'>🔎 근거 찾아보기</div><div class='panel-sub'>질문 후 파일명·PDF 페이지·검색 근거 표시</div></div>", unsafe_allow_html=True)
-        if st.button("근거 확인하며 질문하기", use_container_width=True):
-            st.session_state.next_mode = "질문"
-            st.rerun()
-    st.write("")
-    st.markdown("<div class='panel'><div class='panel-label'>최근 탐색한 주제</div><div class='panel-sub'>이 세션에서 검색한 질문</div></div>", unsafe_allow_html=True)
-    if st.session_state.recent_topics:
-        for i, topic in enumerate(reversed(st.session_state.recent_topics[-5:])):
-            if st.button("↗ " + topic, use_container_width=True, key=f"recent_{i}"):
-                queue_question(topic)
-    else:
-        st.caption("아직 탐색한 주제가 없습니다. 위에서 질문을 시작해 보세요.")
-
-elif mode == "내 문서":
-    st.subheader("내 학습 문서")
-    st.caption("현재 세션에 업로드한 파일을 하나의 RAG 검색 대상으로 구성했습니다.")
-    for info in st.session_state.doc_summaries:
-        with st.container(border=True):
-            st.markdown(f"**📄 {info['name']}**")
-            st.caption(f"형식 {info['type']} · 추출 단위 {info['parts']}개 · 텍스트 약 {info['chars']:,}자")
-    st.subheader("문서 항목 탐색")
-    if st.session_state.doc_topics:
-        for i, item in enumerate(st.session_state.doc_topics):
-            if st.button(item["title"] + "  ·  " + item["source"], key=f"topic_{i}", use_container_width=True):
-                queue_question(item["title"] + "에 관해 문서에 나온 내용을 정리해 주세요.")
-    else:
-        st.caption("제목 패턴을 자동으로 찾지 못했습니다. '질문' 메뉴에서 원하는 주제로 검색하세요.")
-
+if not st.session_state.messages and not st.session_state.question_pending:
+    render_welcome(ready=True)
+    render_question_form(ready=True)
+    render_recommendations()
 else:
-    st.caption("📚 업로드 문서 기반 답변 · 🔎 검색한 근거 표시 · ✅ 답변 검증")
-    if not st.session_state.messages:
-        st.info("학습 자료를 바탕으로 질문에 답합니다. 오른쪽 검색 결과가 아닌 실제 업로드 문서의 근거를 표시합니다.")
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"], avatar="🎓" if msg["role"] == "assistant" else "👤"):
-            st.markdown(msg["content"])
-            if msg["role"] == "assistant" and msg.get("sources"):
-                with st.expander(f"🔎 실제 검색된 근거 {len(msg['sources'])}개 보기"):
-                    for item in msg["sources"]:
-                        st.markdown("**" + item["label"] + "**")
-                        st.caption(item["snippet"])
-                        st.divider()
-    direct = st.chat_input("업로드 문서에 대해 질문해 보세요...")
-    question = st.session_state.question_pending or direct
-    if question and question.strip():
-        st.session_state.question_pending = None
-        question = question.strip()
-        st.session_state.messages.append({"role":"user", "content":question})
-        if question not in st.session_state.recent_topics:
-            st.session_state.recent_topics.append(question)
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(question)
-        with st.chat_message("assistant", avatar="🎓"):
-            with st.spinner("문서에서 검색하고 답변을 검증하고 있습니다..."):
-                try:
-                    result = st.session_state.rag_chain.invoke({"input": question})
-                    answer, sources = result["answer"], result["sources"]
-                except Exception as exc:
-                    answer, sources = f"응답 생성 중 오류: {type(exc).__name__}: {exc}", []
-            st.markdown(answer)
-            if sources:
-                with st.expander(f"🔎 실제 검색된 근거 {len(sources)}개 보기"):
-                    for item in sources:
-                        st.markdown("**" + item["label"] + "**")
-                        st.caption(item["snippet"])
-                        st.divider()
-        st.session_state.messages.append({"role":"assistant", "content":answer, "sources":sources})
+    render_conversation()
+    with st.expander("문서 맞춤 추천 질문 보기"):
+        render_recommendations()
+
+st.caption("AI 답변은 참고 자료예요. 출처를 확인하고, 운영 기준은 최신 공식 공지를 확인하세요.")
