@@ -565,8 +565,6 @@ with st.sidebar:
         st.info("AIVLE School 백서나 학습 자료를 업로드해 주세요.")
         st.caption("별도 백서 파일 배포 없이, 업로드한 자료로 학습합니다.")
     st.divider()
-    suggestion_area = st.container()
-    st.divider()
     if st.button("🗑️ 대화 내용 삭제", use_container_width=True):
         st.session_state.messages = []
         st.session_state.recent_topics = []
@@ -653,30 +651,9 @@ if not st.session_state.suggested_questions and st.session_state.suggestion_erro
         except Exception as exc:
             st.session_state.suggestion_error = str(exc)
 
-with suggestion_area:
-    st.markdown("#### 💡 문서 맞춤 추천 질문")
-    if st.session_state.suggested_questions:
-        for i, q in enumerate(st.session_state.suggested_questions):
-            if st.button("✦ " + q, use_container_width=True, key=f"recommend_{i}"):
-                st.session_state.question_pending = q
-                st.session_state.next_mode = "질문"
-                st.rerun()
-    else:
-        st.caption("질문 생성에 실패했습니다. 다시 생성으로 재시도할 수 있습니다.")
-        if st.session_state.suggestion_error:
-            st.caption(st.session_state.suggestion_error)
-    if st.button("🔄 추천 질문 다시 생성", use_container_width=True):
-        st.session_state.suggested_questions = []
-        st.session_state.suggestion_error = None
-        st.rerun()
-
-# [개선] 네 가지 주제 카테고리는 검색 진입점이며 질문답변은 모두 RAG로 처리.
-CATEGORY_QUESTIONS = {
-    "지원 자격": "에이블스쿨 지원 자격과 선발 조건은 무엇인가요?",
-    "교육과정": "에이블스쿨 교육과정과 두 트랙의 차이를 설명해 주세요.",
-    "프로젝트": "미니프로젝트와 빅프로젝트는 어떻게 진행되나요?",
-    "취업 지원": "수료생을 위한 취업 지원 프로그램은 무엇인가요?",
-}
+# [UI 변경] 사이드바의 추천 질문 목록은 제거했습니다.
+# 추천 질문은 아래 '탐색' 화면의 검색창 바로 아래에 표시합니다.
+# 기존 문서 분석, AI 질문 생성, 같은 문서의 질문 캐시, RAG 답변 로직은 유지합니다.
 
 def queue_question(question):
     st.session_state.question_pending = question
@@ -690,11 +667,28 @@ if mode == "탐색":
         search_submit = st.form_submit_button("질문하기", use_container_width=True)
     if search_submit and search.strip():
         queue_question(search.strip())
-    cols = st.columns(4)
-    for c, (label, question) in zip(cols, CATEGORY_QUESTIONS.items()):
-        with c:
-            if st.button(label, use_container_width=True, key="category_" + label):
-                queue_question(question)
+    # [UI 변경] 고정 주제 버튼 4개를 삭제하고, 업로드 문서 기반 AI 추천 질문으로 대체
+    st.markdown("#### 💡 문서 맞춤 추천 질문")
+    st.caption("업로드한 문서를 분석하여 생성한 질문입니다. 클릭하면 해당 질문으로 답변합니다.")
+    if st.session_state.suggested_questions:
+        # 2열 × 2행: 긴 추천 질문도 읽기 쉽도록 배치
+        recommended = st.session_state.suggested_questions[:4]
+        for row_idx in range(0, len(recommended), 2):
+            cols = st.columns(2)
+            for col, idx in zip(cols, range(row_idx, min(row_idx + 2, len(recommended)))):
+                with col:
+                    if st.button("✦ " + recommended[idx], key=f"recommend_{idx}", use_container_width=True):
+                        queue_question(recommended[idx])
+    else:
+        st.info("추천 질문을 만들지 못했습니다. 아래 버튼으로 다시 시도해 주세요.")
+        if st.session_state.suggestion_error:
+            st.caption(st.session_state.suggestion_error)
+
+    # [UI 변경] 다시 생성 버튼도 추천 질문 바로 아래로 이동
+    if st.button("🔄 추천 질문 다시 생성", key="regenerate_questions", use_container_width=True):
+        st.session_state.suggested_questions = []
+        st.session_state.suggestion_error = None
+        st.rerun()
     st.write("")
     panel_a, panel_b = st.columns(2)
     with panel_a:
