@@ -56,6 +56,13 @@ def load_uploaded_documents(files, tempdir):
         data = file.getvalue()
         name = Path(file.name).name
         ext = Path(name).suffix.lower()
+        # [조원 개선 ① / 1일차 6행] 파일 형식 검사
+        # 기존의 PDF 전용 제약을 그대로 적용하면 DOCX/PPTX/XLSX 지원이 중단되므로,
+        # 전체 업로드 파일은 지원 확장자를 확인하고 PDF일 때만 PDF 헤더까지 검사합니다.
+        if ext.lstrip(".") not in SUPPORTED_EXTENSIONS:
+            raise ValueError(f"{name}: 지원하지 않는 형식입니다. ({', '.join(SUPPORTED_EXTENSIONS)})")
+        if ext == ".pdf" and not data.startswith(b"%PDF-"):
+            raise ValueError(f"{name}: 확장자는 PDF이지만 실제 PDF 파일 형식이 아닙니다.")
         if len(data) > MAX_FILE_BYTES:
             raise ValueError(f"{name}: 파일당 20MB 이하만 지원합니다.")
         safe = hashlib.sha256((name + str(len(data))).encode()).hexdigest()[:12] + ext
@@ -63,8 +70,7 @@ def load_uploaded_documents(files, tempdir):
         path.write_bytes(data)
         item_docs = []
         if ext == ".pdf":
-            if not data.startswith(b"%PDF-"):
-                raise ValueError(f"{name}: PDF 파일 형식이 올바르지 않습니다.")
+            # [조원 개선 ①] 상단에서 파일명·실제 PDF 헤더를 검증한 파일만 처리
             item_docs = PyMuPDF4LLMLoader(str(path)).load()
         elif ext == ".docx":
             from docx import Document as WordDocument
@@ -229,7 +235,11 @@ def rag_pipeline(docs, persist_directory="chroma_db"):
         embedding_function=embedding,
         persist_directory=persist_directory
     )
-    # [개선] 업로드된 문서 조합이 바뀔 때만 호출되므로, 세션별 임시 DB를 초기화합니다.
+    # [조원 개선 ② / 1일차 26행] 벡터화 중복 방지
+    # 아래 reset/add는 문서 집합이 달라졌을 때만 실행합니다.
+    # main()의 SHA-256 문서 해시 + st.session_state.rag_chain 재사용 조건을 보세요.
+    # chroma_db는 세션별 TemporaryDirectory 아래에 위치하여 사용자 간 섞이지 않습니다.
+    # 다른 문서로 교체할 때만 이 컬렉션을 초기화하고 새 문서를 벡터화합니다.
     vectorstore.reset_collection()
     vectorstore.add_documents(chunks)
 
@@ -301,6 +311,9 @@ def rag_pipeline(docs, persist_directory="chroma_db"):
             if raw.startswith("```"):
                 raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
             data = json.loads(raw)
+            # [조원 개선 ③ / 1일차 109행] JSON 파싱 성공해도 배열/문자열일 수 있어 검증
+            if not isinstance(data, dict):
+                raise ValueError("검색 질문 생성 결과가 JSON 객체(dict)가 아닙니다.")
             complexity = data.get("complexity", "simple")
             complexity = complexity if complexity in ("simple", "complex") else "simple"
             limit = 5 if complexity == "complex" else 2
@@ -435,6 +448,7 @@ def rag_pipeline(docs, persist_directory="chroma_db"):
         try:
             raw = verification_chain.invoke({**values, "answer": answer})
             verdict = json.loads(remove_json_fences(raw))
+            # [조원 개선 ③] 검증 모델의 JSON 객체/불리언 필드 검사 (기존 로직 유지)
             if not isinstance(verdict, dict) or type(verdict.get("pass")) is not bool:
                 raise ValueError("검증 JSON에 불리언 pass가 없습니다")
             passed = verdict["pass"]
@@ -489,6 +503,9 @@ def generate_suggested_questions(document_preview):
     if content.startswith("```"):
         content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
     data = json.loads(content)
+    # [조원 개선 ③] 추천 질문 역시 JSON 객체가 아닌 값이면 명확히 예외처리
+    if not isinstance(data, dict):
+        raise ValueError("추천 질문 생성 결과가 JSON 객체(dict)가 아닙니다.")
     questions = data.get("questions")
     if not isinstance(questions, list) or len(questions) != 4:
         raise ValueError("AI가 추천 질문 4개를 반환하지 않았습니다.")
@@ -591,7 +608,10 @@ st.markdown("""<div class='hero'>
   <div class='hero-subtitle'>교육과정, 지원 혜택, 프로젝트 등을 질문하고 자료에서 근거를 확인하세요.</div>
 </div>""", unsafe_allow_html=True)
 
-# [미션 3] 다중 파일 해시: 파일 순서 및 내용이 동일하면 다시 벡터화하지 않음.
+# [조원 개선 ② / 1일차 26행] 같은 문서 세트의 재벡터화 방지.
+# SHA-256 해시는 파일명과 파일 내용에서 생성합니다. Streamlit이 질문마다
+# 스크립트를 재실행하더라도 파일 내용이 같으면 session_state의 RAG 체인을 재사용합니다.
+# 다른 파일을 올리거나 파일 내용을 변경한 경우에만 신규 벡터 저장소를 구성합니다.
 if not files:
     st.info("왼쪽에서 PDF, DOCX 등 학습 자료를 업로드하면 문서 탐색과 AI 질문이 활성화됩니다.")
     st.stop()
@@ -611,6 +631,8 @@ for f in sorted(files, key=lambda x: x.name):
     hash_input.update(hashlib.sha256(f.getvalue()).digest())
 current_hash = hash_input.hexdigest()
 if current_hash != st.session_state.document_hash or st.session_state.rag_chain is None:
+    # [조원 개선 ②] 최초 업로드 또는 파일 내용 변경시에만 이 분기로 진입합니다.
+    # 동일 문서에 대해 '질문하기'를 누르는 것은 벡터화를 재실행하지 않습니다.
     # [개선] 이전 문서 세트와 메모리 상태 정리 (다른 파일 내용이 섞이지 않음).
     old = st.session_state.temp_workspace
     st.session_state.rag_chain = None
