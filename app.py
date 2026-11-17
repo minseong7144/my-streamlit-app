@@ -334,8 +334,46 @@ def rag_pipeline(filepath, persist_directory="chroma_db"):
         print("[피드백 반영 답변 재생성: 1회 완료 / 추가 검증 없음]")
         return revised
 
+    # [신규: PDF 자동 추천 질문] 이미 분할한 청크 중 문서 전체에서 골고루 샘플링합니다.
+    # 별도 PDF 로더나 임베딩 호출 없이 질문 생성에 필요한 텍스트만 추립니다.
+    sample_count = min(12, len(chunks))
+    sample_indices = sorted({round(i * (len(chunks) - 1) / max(1, sample_count - 1))
+                             for i in range(sample_count)})
+    document_preview = "\n\n".join(
+        f"[자료 {i+1}] {chunks[idx].page_content[:850]}"
+        for i, idx in enumerate(sample_indices)
+    )
+
     # 기존 rag_chain.invoke({"input": ...}) 인터페이스 유지
-    return RunnableLambda(answer_with_verification)
+    return RunnableLambda(answer_with_verification), document_preview
+
+
+def generate_suggested_questions(document_preview):
+    """업로드한 문서의 일부를 LLM에 전달해 실제 문서 내용에 근거한 질문 4개를 생성."""
+    # [신규] 답변용 RAG 체인과 분리된 호출: 질문 생성은 1개 API 호출만 사용
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """당신은 PDF 문서 학습 도우미의 추천 질문 생성자입니다.
+제공된 문서 발췌 내용만 바탕으로 교육생이 궁금해할 질문을 정확히 4개 작성하세요.
+- 발췌에서 실제로 확인되는 주제만 다루고, 없는 정책/정보를 가정하지 마세요.
+- 서로 다른 주제를 선정하고, 구체적이며 답변 가능한 자연스러운 한국어 질문으로 작성하세요.
+- 추측으로 날짜, 수치, 조건을 만들지 마세요.
+- 출력은 다른 설명 없이 JSON 객체 하나: {{"questions":["질문1?","질문2?","질문3?","질문4?"]}}"""),
+        ("human", "다음은 업로드한 PDF에서 추출한 내용입니다.\n\n{preview}"),
+    ])
+    # [신규] JSON 파싱 실패 시 사용자에게 오류를 노출하고 재시도할 수 있게 합니다.
+    response = (prompt | llm | StrOutputParser()).invoke({"preview": document_preview})
+    content = response.strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    data = json.loads(content)
+    questions = data.get("questions")
+    if not isinstance(questions, list) or len(questions) != 4:
+        raise ValueError("AI가 추천 질문 4개를 반환하지 않았습니다.")
+    normalized = [q.strip() for q in questions if isinstance(q, str) and q.strip()]
+    if len(normalized) != 4 or len(set(normalized)) != 4:
+        raise ValueError("추천 질문이 비어 있거나 중복되었습니다.")
+    return normalized
 
 # ===== [미션 4] AIVLE 분위기의 화면 구성 =====
 # 시연용 CSS: 채팅창, 추천 질문, 사이드바에 민트/화이트 레이아웃 적용
@@ -383,6 +421,11 @@ if "rag_chain" not in st.session_state:
     st.session_state.rag_chain = None
 if "temp_workspace" not in st.session_state:
     st.session_state.temp_workspace = None
+# [신규] PDF가 변경될 때만 질문 목록을 갱신하도록 세션에 저장합니다.
+if "suggested_questions" not in st.session_state:
+    st.session_state.suggested_questions = []
+if "suggestion_error" not in st.session_state:
+    st.session_state.suggestion_error = None
 
 # ===== [미션 3] 파일 업로드 + 추천 질문 + 대화 삭제 : 사이드바 =====
 with st.sidebar:
@@ -403,18 +446,9 @@ with st.sidebar:
         st.info("📄 AIVLE School 백서 PDF를 업로드해 주세요. 별도 파일 배포는 필요하지 않습니다.")
 
     st.divider()
-    st.markdown("#### 💡 추천 질문")
-    # [개선 4] 추천 질문을 클릭하면 아래 채팅 입력과 동일하게 RAG로 처리
-    suggestions = [
-        ("에이블스쿨 소개", "AIVLE School은 어떤 프로그램이고 무엇을 배우나요?"),
-        ("두 트랙 비교", "AI 개발자 트랙과 DX 컨설턴트 트랙의 차이를 알려주세요."),
-        ("스터디 활용", "스터디는 어떻게 운영되고 어떻게 참여할 수 있나요?"),
-        ("프로젝트 준비", "미니프로젝트와 빅프로젝트를 준비할 때 무엇을 고려하면 좋을까요?"),
-    ]
-    suggested_question = None
-    for index, (label, question) in enumerate(suggestions):
-        if st.button(f"✦ {label}", use_container_width=True, key=f"suggest_{index}"):
-            suggested_question = question
+    # [신규] 벡터화가 완료된 뒤 이 위치에 AI 추천 질문 4개를 표시합니다.
+    # 사이드바 위치는 기존 UI와 동일하게 유지합니다.
+    suggestion_area = st.container()
 
     st.divider()
     # [개선 5] 기록만 삭제하고 동일 문서에 대한 벡터 DB/체인은 유지
@@ -476,17 +510,53 @@ if current_hash != st.session_state.document_hash or st.session_state.rag_chain 
             source_pdf.write_bytes(pdf_data)
             db_dir = str(Path(workspace.name) / "chroma_db")
             # [1일차 함수 재사용] 업로드 파일을 청크 분할·임베딩·Chroma 저장; 질문마다 재벡터화하지 않음
-            new_chain = rag_pipeline(str(source_pdf), persist_directory=db_dir)
+            new_chain, document_preview = rag_pipeline(str(source_pdf), persist_directory=db_dir)
         except Exception as exc:
             workspace.cleanup()
             st.error(f"PDF 처리 중 오류가 발생했습니다: {exc}")
             st.stop()
         st.session_state.temp_workspace = workspace
         st.session_state.rag_chain = new_chain
+        st.session_state.document_preview = document_preview
         st.session_state.document_hash = current_hash
+        # [신규] PDF가 바뀌면 이전 문서에서 생성한 질문을 사용하지 않습니다.
+        st.session_state.suggested_questions = []
+        st.session_state.suggestion_error = None
         # 문서가 변경됐으므로 기존 PDF에 대한 대화 기록은 혼용하지 않음
         st.session_state.messages = []
     st.toast("문서 분석이 완료되었습니다.", icon="✅")
+
+# ===== [신규 미션 4] 업로드한 PDF에 맞는 추천 질문을 자동 생성 =====
+# [설명] 같은 PDF의 세션 재실행/일반 질문 시에는 API를 다시 호출하지 않습니다.
+# 질문 생성 오류 시에는 빈 목록을 유지하며 버튼으로 수동 재시도할 수 있습니다.
+if not st.session_state.suggested_questions and st.session_state.suggestion_error is None:
+    with st.spinner("💡 업로드한 PDF를 읽고 추천 질문 4개를 생성하는 중입니다..."):
+        try:
+            st.session_state.suggested_questions = generate_suggested_questions(
+                st.session_state.document_preview
+            )
+        except Exception as exc:
+            st.session_state.suggestion_error = f"{type(exc).__name__}: {exc}"
+
+# [신규] 사이드바에 생성된 실제 질문을 그대로 버튼으로 표시합니다.
+suggested_question = None
+with suggestion_area:
+    st.markdown("#### 💡 PDF 맞춤 추천 질문")
+    if st.session_state.suggested_questions:
+        st.caption("업로드한 문서 내용을 AI가 분석해 만든 질문입니다.")
+        for index, question_text in enumerate(st.session_state.suggested_questions):
+            if st.button(f"✦ {question_text}", use_container_width=True,
+                         key=f"dynamic_suggest_{index}"):
+                suggested_question = question_text
+    else:
+        st.warning("추천 질문을 만들지 못했습니다. 아래 버튼으로 다시 시도할 수 있습니다.")
+        if st.session_state.suggestion_error:
+            st.caption(st.session_state.suggestion_error)
+    # [신규] PDF를 유지한 채 질문만 새로 생성할 수 있습니다 (추가 API 비용 발생).
+    if st.button("🔄 추천 질문 다시 생성", use_container_width=True, key="refresh_suggestions"):
+        st.session_state.suggested_questions = []
+        st.session_state.suggestion_error = None
+        st.rerun()
 
 st.markdown("<div class='aivle-note'>📖 문서 기반 답변 · 🧭 백서 페이지 표시 · ✅ 답변 근거 검증</div>", unsafe_allow_html=True)
 
